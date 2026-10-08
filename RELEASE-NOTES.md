@@ -1,5 +1,10 @@
 # Metrics Explorer release notes
 
+## 1.0.1
+
+- Removed the minimum Splunk version from `app.manifest`, which Splunkbase's packaging check
+  rejected. Splunk Enterprise or Splunk Cloud Platform 10.0 or later is still required.
+
 ## 1.0.0
 
 First release. Metrics Explorer inspects the metrics in any Splunk metrics index, by name, without
