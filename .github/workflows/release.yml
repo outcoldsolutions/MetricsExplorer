@@ -1,0 +1,65 @@
+# Publishes a GitHub Release when a vX.Y.Z tag is pushed.
+#
+# To release:
+#   1. Bump the version in app.conf ([launcher] and [id]) and app.manifest, raise
+#      app.conf [install] build and app.manifest releaseDate, and add a "## X.Y.Z"
+#      section at the top of RELEASE-NOTES.md.
+#   2. Commit, then tag vX.Y.Z and push the tag.
+#   3. This workflow checks the versions, builds and inspects the package with
+#      check.yml, and creates the release with the package and its SHA-256 checksum.
+#   4. Upload the package from the release to Splunkbase.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  versions:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the previous tag, to check build and releaseDate went up
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Check versions
+        run: python3 scripts/check_release.py "$GITHUB_REF_NAME"
+
+  check:
+    needs: versions
+    uses: ./.github/workflows/check.yml
+
+  publish:
+    needs: check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package
+          path: dist
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          package="metricsexplorer-$version.tgz"
+          python3 scripts/check_release.py "$GITHUB_REF_NAME" --notes-out dist/notes.md
+          cd dist
+          test -f "$package" || { echo "::error::dist/$package was not built"; exit 1; }
+          sha256sum "$package" > "$package.sha256"
+          gh release create "$GITHUB_REF_NAME" "$package" "$package.sha256" \
+            --verify-tag --title "Metrics Explorer $version" --notes-file notes.md

@@ -3,3 +3,5 @@
 .gitattributes export-ignore
 CONTRIBUTING   export-ignore
 docs/          export-ignore
+.github/       export-ignore
+scripts/       export-ignore
