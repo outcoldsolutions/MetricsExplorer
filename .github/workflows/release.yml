@@ -1,9 +1,10 @@
 # Publishes a GitHub Release when a vX.Y.Z tag is pushed.
 #
 # To release:
-#   1. Bump the version in app.conf ([launcher] and [id]) and app.manifest, raise
-#      app.conf [install] build and app.manifest releaseDate, and add a "## X.Y.Z"
-#      section at the top of RELEASE-NOTES.md.
+#   1. Bump the version in app.conf ([launcher] and [id]) and app.manifest, set
+#      app.conf [install] build to YYYYMMDDNN (the release date plus a two-digit
+#      counter) and app.manifest releaseDate to the release date, and add a
+#      "## X.Y.Z" section at the top of RELEASE-NOTES.md.
 #   2. Commit, then tag vX.Y.Z and push the tag.
 #   3. This workflow checks the versions, builds and inspects the package with
 #      check.yml, and creates the release with the package and its SHA-256 checksum.

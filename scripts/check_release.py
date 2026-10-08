@@ -5,7 +5,8 @@
   - app.conf [launcher] version and [id] version are X.Y.Z;
   - app.manifest info.id.version is X.Y.Z;
   - the newest ## heading in RELEASE-NOTES.md is X.Y.Z, with notes under it;
-  - app.conf [install] build and app.manifest releaseDate went up since the previous tag.
+  - since the previous tag, app.conf [install] build went up and app.manifest
+    releaseDate did not go back.
 
 With --notes-out, also writes that version's RELEASE-NOTES.md section to a file.
 Usage: scripts/check_release.py vX.Y.Z [--notes-out PATH]
@@ -99,15 +100,15 @@ def main():
         prev_date = json.loads(git("show", f"{prev}:app.manifest"))["info"].get("releaseDate") or ""
         if int(build) <= int(prev_build):
             errors.append(f"app.conf [install] build {build} is not above {prev_build} from {prev}")
-        if release_date <= prev_date:
-            errors.append(f"app.manifest releaseDate {release_date} is not after {prev_date} from {prev}")
+        if release_date < prev_date:
+            errors.append(f"app.manifest releaseDate {release_date} is before {prev_date} from {prev}")
 
     for e in errors:
         print(f"::error::{e}")
     if errors:
         return 1
 
-    print(f"{args.tag}: versions agree" + (f"; build and releaseDate bumped since {prev}" if prev else ""))
+    print(f"{args.tag}: versions agree" + (f"; build raised since {prev}" if prev else ""))
     if args.notes_out:
         args.notes_out.write_text(notes + "\n", encoding="utf-8")
     return 0
