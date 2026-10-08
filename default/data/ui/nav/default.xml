@@ -1,0 +1,4 @@
+<nav search_view="search" color="#3F6FDE00">
+  <view name="metric_explorer" default="true" />
+  <view name="search" />
+</nav>

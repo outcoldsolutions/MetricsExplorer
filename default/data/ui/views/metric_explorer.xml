@@ -1,0 +1,727 @@
+
+<dashboard version="2">
+    <label>Metrics Explorer</label>
+    <description>Inspect a metric by name: where it is emitted (sources, hosts, indexes), what dimensions it carries, and recent raw samples.</description>
+    <definition><![CDATA[
+{
+	"title": "Metrics Explorer",
+	"description": "Inspect a metric by name: where it is emitted (sources, hosts, indexes), what dimensions it carries, and recent raw samples.",
+	"inputs": {
+		"input_metric": {
+			"type": "input.text",
+			"title": "Metric name (wildcards allowed)",
+			"options": {
+				"defaultValue": "*",
+				"token": "metric_name"
+			}
+		},
+		"input_index": {
+			"type": "input.text",
+			"title": "Index (wildcards allowed)",
+			"options": {
+				"defaultValue": "*",
+				"token": "index_filter"
+			}
+		},
+		"input_period": {
+			"type": "input.timerange",
+			"title": "Period",
+			"options": {
+				"defaultValue": "-15m@m,now",
+				"token": "period"
+			}
+		},
+		"input_spl_syntax": {
+			"type": "input.dropdown",
+			"title": "SPL syntax",
+			"options": {
+				"items": [
+					{
+						"label": "latest(_value) BY metric_name",
+						"value": "value"
+					},
+					{
+						"label": "latest(<metric_name>)",
+						"value": "named"
+					}
+				],
+				"defaultValue": "value",
+				"token": "spl_syntax"
+			}
+		},
+		"input_open_spl": {
+			"type": "input.button",
+			"options": {
+				"label": "Open in Search"
+			},
+			"eventHandlers": [
+				{
+					"type": "drilldown.customUrl",
+					"options": {
+						"url": "/app/metricsexplorer/search?q=$Latest plan:result.latest_search$&earliest=$period.earliest$&latest=$period.latest$",
+						"newTab": true
+					}
+				}
+			],
+			"canvasAlignment": "center"
+		},
+		"input_sample_limit": {
+			"type": "input.dropdown",
+			"title": "Sample limit",
+			"options": {
+				"items": [
+					{
+						"label": "50",
+						"value": "50"
+					},
+					{
+						"label": "200",
+						"value": "200"
+					},
+					{
+						"label": "500",
+						"value": "500"
+					},
+					{
+						"label": "2000",
+						"value": "2000"
+					}
+				],
+				"defaultValue": "200",
+				"token": "sample_limit"
+			}
+		}
+	},
+	"dataSources": {
+		"ds_total_metric_names": {
+			"type": "ds.search",
+			"name": "Total metric names in scope",
+			"options": {
+				"query": "| mcatalog values(metric_name) as metric_name WHERE index=$index_filter|s$ | stats dc(metric_name) as count",
+				"queryParameters": {
+					"earliest": "$period.earliest$",
+					"latest": "$period.latest$"
+				}
+			}
+		},
+		"ds_matching_metric_names": {
+			"type": "ds.search",
+			"name": "Matching metric names",
+			"options": {
+				"query": "| mcatalog values(metric_name) as metric_name WHERE index=$index_filter|s$ AND metric_name=$metric_name|s$ | stats dc(metric_name) as count",
+				"queryParameters": {
+					"earliest": "$period.earliest$",
+					"latest": "$period.latest$"
+				}
+			}
+		},
+		"ds_distinct_hosts": {
+			"type": "ds.search",
+			"name": "Distinct hosts",
+			"options": {
+				"query": "| mcatalog values(host) as host WHERE index=$index_filter|s$ AND metric_name=$metric_name|s$ | stats dc(host) as count",
+				"queryParameters": {
+					"earliest": "$period.earliest$",
+					"latest": "$period.latest$"
+				}
+			}
+		},
+		"ds_distinct_sources": {
+			"type": "ds.search",
+			"name": "Distinct sources",
+			"options": {
+				"query": "| mcatalog values(service.name) as svc values(k8s.deployment.name) as deploy WHERE index=$index_filter|s$ AND metric_name=$metric_name|s$ | eval all=mvappend(svc, deploy) | stats dc(all) as count",
+				"queryParameters": {
+					"earliest": "$period.earliest$",
+					"latest": "$period.latest$"
+				}
+			}
+		},
+		"ds_metric_list": {
+			"type": "ds.search",
+			"name": "Matching metric names list",
+			"options": {
+				"query": "| mcatalog values(metric_name) as metric_name WHERE index=$index_filter|s$ AND metric_name IN ($metric_name$) \n| mvexpand metric_name | sort metric_name | table metric_name",
+				"queryParameters": {
+					"earliest": "$period.earliest$",
+					"latest": "$period.latest$"
+				}
+			}
+		},
+		"ds_topology": {
+			"type": "ds.search",
+			"name": "Topology",
+			"options": {
+				"query": "| mcatalog values(_dims) as dimensions values(k8s.deployment.name) as deployment WHERE index=$index_filter|s$ AND metric_name=$metric_name|s$ GROUPBY metric_name index host service.name\n| append \n    [ mcatalog values(_dims) as dimensions values(k8s.deployment.name) as deployment WHERE index=$index_filter|s$ AND metric_name=$metric_name|s$ GROUPBY metric_name index host ]\n| fillnull service.name value=\"-\"\n| eval source=if(isnull('deployment'),'service.name','deployment')\n| sort dimensions\n| mvcombine delim=\",\" dimensions\n| sort host\n| stats values(host) as hosts by metric_name dimensions index source\n| mvcombine delim=\",\" hosts \n| sort source \n| stats values(source) as sources by metric_name dimensions index hosts \n| mvcombine delim=\"-\" sources \n| sort index \n| stats values(index) as indexes by metric_name dimensions hosts sources \n| mvcombine delim=\",\" indexes \n| table metric_name sources hosts indexes dimensions",
+				"queryParameters": {
+					"earliest": "$period.earliest$",
+					"latest": "$period.latest$"
+				}
+			}
+		},
+		"ds_samples_over_time": {
+			"type": "ds.search",
+			"name": "Sample count over time",
+			"options": {
+				"query": "$Count plan:result.search$",
+				"queryParameters": {
+					"earliest": "$period.earliest$",
+					"latest": "$period.latest$"
+				}
+			}
+		},
+		"ds_latest_values": {
+			"type": "ds.search",
+			"name": "Latest values",
+			"options": {
+				"query": "$Latest plan:result.latest_search$\n| foreach * [ eval _dims=if(isnull('<<FIELD>>') OR in(\"<<FIELD>>\", \"metric_name\", \"value\", \"k8s.deployment.name\", \"service.name\") OR like(\"<<FIELD>>\", \"latest(%)\"), _dims, mvappend(_dims, \"<<FIELD>>=\" . '<<FIELD>>')) ]\n| eval _dims=mvappend(_dims, if(isnull(_src), null(), \"source=\" . _src)), _lbl=if(isnull(_dims), \"\", \" [\" . mvjoin(_dims, \", \") . \"]\")\n| eval pair=if(isnull(metric_name), null(), metric_name . _lbl . \"|#|\" . value)\n| foreach * [ eval pair=if(like(\"<<FIELD>>\", \"latest(%)\") AND isnotnull('<<FIELD>>'), mvappend(pair, replace(\"<<FIELD>>\", \"^latest\\\\((.*)\\\\)\", \"\\\\1\") . _lbl . \"|#|\" . '<<FIELD>>'), pair) ]\n| mvexpand pair\n| eval series=mvindex(split(pair, \"|#|\"), 0), value=mvindex(split(pair, \"|#|\"), 1)\n| timechart span=1m latest(value) by series limit=0 useother=f",
+				"queryParameters": {
+					"earliest": "$period.earliest$",
+					"latest": "$period.latest$"
+				}
+			}
+		},
+		"ds_raw_samples": {
+			"type": "ds.search",
+			"name": "Recent samples",
+			"options": {
+				"query": "| mpreview index=$index_filter|s$\n| search \"metric_name:$metric_name$\"\n| head $sample_limit$\n| foreach * [\n    eval\n        name=if(like(\"<<FIELD>>\", \"metric_name:%\"), if(isnull('<<FIELD>>'), name, mvappend(name, replace(\"<<FIELD>>\",\"^metric_name:\",\"\"))), name),\n        value=if(like(\"<<FIELD>>\", \"metric_name:%\"), mvappend(value,'<<FIELD>>'), value),\n        dimension=if(like(\"<<FIELD>>\", \"metric_name:%\"), dimension, if(isnull('<<FIELD>>'), dimension, mvappend(dimension, \"<<FIELD>>\"))),\n        dimension_value=if(like(\"<<FIELD>>\", \"metric_name:%\"), dimension_value, mvappend(dimension_value,'<<FIELD>>')),\n        _filter=if(like(\"<<FIELD>>\", \"metric_name:%\") OR isnull('<<FIELD>>') OR in(\"<<FIELD>>\", \"name\", \"value\", \"dimension\", \"dimension_value\"), _filter, mvappend(_filter, mvmap('<<FIELD>>', \"<<FIELD>>=\\\"\" . replace('<<FIELD>>', \"\\\"\", \"\\\\\\\"\") . \"\\\"\")))\n]\n| eval ts=strftime(_time, \"%Y-%m-%d %H:%M:%S.%3N\")\n| eval _t0=_time, _t1=_time+0.001\n| eval _drill=\"| mpreview index=\" . $index_filter|s$ . \" | search \" . mvjoin(mvmap(name, \"\\\"metric_name:\" . name . \"\\\"\"), \" \") . \" \" . mvjoin(_filter, \" \")\n| table ts name value dimension dimension_value host service.name k8s.deployment.name _t0 _t1 _drill",
+				"queryParameters": {
+					"earliest": "$period.earliest$",
+					"latest": "$period.latest$"
+				}
+			}
+		},
+		"ds_topology_select": {
+			"type": "ds.chain",
+			"name": "Topology with selection actions",
+			"options": {
+				"extend": "ds_topology",
+				"query": "| eval dimension=split(trim(replace(mvjoin(dimensions, \" \"), \"[[:space:],]+\", \" \")), \" \")\n| mvexpand dimension\n| eval _state=$state|s$\n| foreach metric_name sources hosts indexes dimension [\n    eval _add_<<FIELD>>=if(_state==\"[]\", \"[\", substr(_state, 1, len(_state)-1) . \",\") . json_object(\"m\", metric_name, \"d\", case(\"<<FIELD>>\"==\"metric_name\", \"*\", \"<<FIELD>>\"==\"sources\", \"source\", \"<<FIELD>>\"==\"hosts\", \"host\", \"<<FIELD>>\"==\"indexes\", \"index\", true(), \"dimension\"), \"v\", if(\"<<FIELD>>\"==\"metric_name\", json_array(), mv_to_json_array(split(trim(replace(mvjoin('<<FIELD>>', \" \"), \"[[:space:],]+\", \" \")), \" \")))) . \"]\"\n]\n| table metric_name sources hosts indexes dimension _add_metric_name _add_sources _add_hosts _add_indexes _add_dimension"
+			}
+		},
+		"ds_selection": {
+			"type": "ds.search",
+			"name": "Basic criteria",
+			"options": {
+				"query": "| makeresults\n| eval _state=$state|s$\n| eval items=json_array_to_mv(_state)\n| mvexpand items\n| where isnotnull(items)\n| eval metric_name=json_extract(items, \"m\"), dimension=json_extract(items, \"d\"), values=json_array_to_mv(json_extract(items, \"v\"))\n| eval _key=metric_name . \"|\" . dimension . \"|\" . coalesce(mvjoin(values, \",\"), \"\")\n| dedup _key\n| eventstats list(items) as _all\n| eval _rest=mvmap(_all, if(json_extract(_all, \"m\") . \"|\" . json_extract(_all, \"d\") . \"|\" . coalesce(mvjoin(json_array_to_mv(json_extract(_all, \"v\")), \",\"), \"\") == _key, null(), _all))\n| eval _without=\"[\" . coalesce(mvjoin(_rest, \",\"), \"\") . \"]\"\n| eval value=if(dimension==\"*\", \"(every sample)\", values), dimension=if(dimension==\"*\", \"-\", dimension)\n| table metric_name dimension value _without"
+			}
+		},
+		"ds_criteria": {
+			"type": "ds.search",
+			"name": "Criteria",
+			"options": {
+				"query": "| makeresults\n| eval items=json_array_to_mv($state|s$), idx=$index_filter|s$, syntax=$spl_syntax|s$\n| mvexpand items\n| where isnotnull(items)\n| eval m=json_extract(items, \"m\"), d=json_extract(items, \"d\"), vals=json_array_to_mv(json_extract(items, \"v\"))\n| eval key=m . \"|\" . d . \"|\" . coalesce(mvjoin(vals, \",\"), \"\")\n| dedup key\n| table m d vals idx syntax"
+			}
+		},
+		"ds_count_plan": {
+			"type": "ds.chain",
+			"name": "Count plan",
+			"options": {
+				"extend": "ds_criteria",
+				"query": "| eval q=mvmap(vals, if(d==\"source\" AND vals==\"-\", null(), \"\\\"\" . replace(replace(vals, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\"))\n| eval nosource=if(d==\"source\" AND isnotnull(mvfind(vals, \"^-$\")), 1, 0)\n| eval terms=case(d==\"host\" OR d==\"index\", mvmap(q, d . \"=\" . q), d==\"source\", mvmap(q, \"(k8s.deployment.name=\" . q . \" OR service.name=\" . q . \")\"), d==\"dimension\", mvmap(vals, vals . \"=*\"))\n| eval clause=case(isnull(terms), \"\", d==\"dimension\", \" AND (\" . mvjoin(terms, \" AND \") . \")\", true(), \" AND (\" . mvjoin(terms, \" OR \") . \")\")\n| eval series=m . if(d==\"*\", \"\", \" [\" . d . \": \" . mvjoin(mvindex(vals, 0, 2), \", \") . if(mvcount(vals) > 3, \" +\" . (mvcount(vals) - 3) . \" more\", \"\") . \"]\")\n| eval base=\"| mstats count WHERE index=\" . \"\\\"\" . replace(replace(idx, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\" . \" AND metric_name=\" . \"\\\"\" . replace(replace(m, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\", label=\"series=\" . \"\\\"\" . replace(replace(series, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\"\n| eval chunks=if(nosource==0, base . clause . \" span=1m | eval \" . label, mvappend(if(isnull(terms), null(), base . clause . \" span=1m | eval \" . label), base . \" span=1m | eval \" . label, base . \" AND (k8s.deployment.name=* OR service.name=*) span=1m | eval count=-count, \" . label))\n| stats count as rows list(chunks) as subs\n| eval n=coalesce(mvcount(subs), 0), first=mvindex(subs, 0), rest=mvindex(subs, 1, -1)\n| eval search=if(n==0, \"| makeresults | where 1=0\", first . coalesce(mvjoin(mvmap(rest, \" | append [ \" . rest . \" ]\"), \"\"), \"\") . \" | timechart span=1m sum(count) by series limit=0 useother=f\")\n| table search",
+				"enableSmartSources": true
+			}
+		},
+		"ds_latest_plan": {
+			"type": "ds.chain",
+			"name": "Latest plan",
+			"options": {
+				"extend": "ds_criteria",
+				"query": "| eval hv=if(d==\"host\", vals, null()), iv=if(d==\"index\", vals, null()), sv=if(d==\"source\", vals, null()), dv=if(d==\"dimension\", vals, null())\n| stats values(hv) as hv values(iv) as iv values(sv) as sv values(dv) as dv first(idx) as idx first(syntax) as syntax by m\n| eval qm=\"\\\"\" . replace(replace(m, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\", hq=mvmap(hv, \"\\\"\" . replace(replace(hv, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\"), iq=mvmap(iv, \"\\\"\" . replace(replace(iv, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\"), sall=mvmap(sv, \"\\\"\" . replace(replace(sv, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\"), sq=mvmap(sv, if(sv==\"-\", null(), \"\\\"\" . replace(replace(sv, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\")), nos=if(isnotnull(mvfind(sv, \"^-$\")), 1, 0)\n| eval clause=if(isnull(hq), \"\", \" AND (\" . mvjoin(mvmap(hq, \"host=\" . hq), \" OR \") . \")\") . if(isnull(iq), \"\", \" AND (\" . mvjoin(mvmap(iq, \"index=\" . iq), \" OR \") . \")\") . if(nos==1 OR isnull(sq), \"\", \" AND (\" . mvjoin(mvmap(sq, \"(k8s.deployment.name=\" . sq . \" OR service.name=\" . sq . \")\"), \" OR \") . \")\") . if(isnull(dv), \"\", \" AND (\" . mvjoin(mvmap(dv, dv . \"=*\"), \" AND \") . \")\")\n| eval byd=coalesce(mvjoin(mvappend(if(isnull(hv), null(), \"host\"), if(isnull(iv), null(), \"index\"), if(isnull(sv), null(), mvappend(\"k8s.deployment.name\", \"service.name\")), dv), \" \"), \"\")\n| eval srcfilter=if(isnull(sv), \"\", \" | eval _src=case('k8s.deployment.name'!=\\\"__null__\\\", 'k8s.deployment.name', 'service.name'!=\\\"__null__\\\", 'service.name', true(), \\\"-\\\") | where in(_src, \" . mvjoin(sall, \", \") . \")\")\n| eval fill=if(isnull(sv), \"\", \"fillnull_value=__null__ \")\n| stats values(qm) as qms values(m) as ms by idx syntax fill clause byd srcfilter\n| eval chunk=\"| mstats \" . fill . if(syntax==\"named\", mvjoin(mvmap(ms, \"latest(\" . ms . \")\"), \" \") . \" WHERE index=\" . \"\\\"\" . replace(replace(idx, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\" . clause . if(byd==\"\", \"\", \" BY \" . byd), \"latest(_value) as value WHERE index=\" . \"\\\"\" . replace(replace(idx, \"\\\\\\\\\", \"\\\\\\\\\\\\\\\\\"), \"\\\"\", \"\\\\\\\\\\\"\") . \"\\\"\" . \" AND \" . if(mvcount(qms)==1, \"metric_name=\" . qms, \"metric_name IN (\" . mvjoin(qms, \", \") . \")\") . clause . \" BY metric_name\" . if(byd==\"\", \"\", \" \" . byd)) . \" span=1m\" . srcfilter\n| stats count as rows list(chunk) as subs\n| eval n=coalesce(mvcount(subs), 0), first=mvindex(subs, 0), rest=mvindex(subs, 1, -1)\n| eval latest_search=if(n==0, \"| makeresults | where 1=0\", first . coalesce(mvjoin(mvmap(rest, \" | append [ \" . rest . \" ]\"), \"\"), \"\"))\n| eval _nl=urldecode(\"%0A\"), spl=if(n==0, \"Click a Topology cell to add basic criteria.\", first . coalesce(mvjoin(mvmap(rest, _nl . \"| append [ \" . rest . \" ]\"), \"\"), \"\"))\n| table latest_search spl",
+				"enableSmartSources": true
+			}
+		}
+	},
+	"visualizations": {
+		"viz_header": {
+			"type": "splunk.markdown",
+			"options": {
+				"markdown": "This dashboard is designed to help you find metrics and their dimensions in your data, and generate boilerplate SPL searches for them.",
+				"fontSize": "small"
+			}
+		},
+		"viz_total_metric_names": {
+			"type": "splunk.singlevalue",
+			"title": "Metric names in scope",
+			"description": "Distinct metric_name values published in the chosen index during the period.",
+			"dataSources": {
+				"primary": "ds_total_metric_names"
+			},
+			"options": {
+				"majorColor": "#1E93C6"
+			}
+		},
+		"viz_matching_metric_names": {
+			"type": "splunk.singlevalue",
+			"title": "Matching this filter",
+			"description": "Metric_name values in scope matching the name filter.",
+			"dataSources": {
+				"primary": "ds_matching_metric_names"
+			},
+			"options": {
+				"majorColor": "#3F6FDE"
+			}
+		},
+		"viz_distinct_hosts": {
+			"type": "splunk.singlevalue",
+			"title": "Distinct hosts",
+			"description": "Distinct hosts emitting one or more matching metrics.",
+			"dataSources": {
+				"primary": "ds_distinct_hosts"
+			},
+			"options": {
+				"majorColor": "#7B5BA0"
+			}
+		},
+		"viz_distinct_sources": {
+			"type": "splunk.singlevalue",
+			"title": "Distinct sources",
+			"description": "Distinct service.name / k8s.deployment.name producing matches.",
+			"dataSources": {
+				"primary": "ds_distinct_sources"
+			},
+			"options": {
+				"majorColor": "#A55B9A"
+			}
+		},
+		"viz_metric_list": {
+			"type": "splunk.table",
+			"title": "Metric names",
+			"description": "Click a row to view the topology",
+			"dataSources": {
+				"primary": "ds_metric_list"
+			},
+			"options": {
+				"rowNumbers": false,
+				"wrap": true,
+				"count": 25
+			},
+			"eventHandlers": [
+				{
+					"type": "drilldown.setToken",
+					"options": {
+						"tokens": [
+							{
+								"token": "metric_name",
+								"key": "row.metric_name.value"
+							},
+							{
+								"token": "form.metric_name",
+								"key": "row.metric_name.value"
+							}
+						]
+					}
+				}
+			]
+		},
+		"viz_topology": {
+			"type": "splunk.table",
+			"title": "Topology — dimensions × source × host × index",
+			"description": "One row per dimension. Click a cell to add it to Basic criteria: a metric name adds every sample of that metric; a source, host or index list adds the metric filtered to it; a dimension adds the samples that carry it.",
+			"dataSources": {
+				"primary": "ds_topology_select"
+			},
+			"options": {
+				"rowNumbers": false,
+				"wrap": true,
+				"count": 25,
+				"showInternalFields": false
+			},
+			"eventHandlers": [
+				{
+					"type": "drilldown.setToken",
+					"options": {
+						"fields": [
+							"metric_name"
+						],
+						"tokens": [
+							{
+								"token": "state",
+								"key": "row._add_metric_name.value"
+							}
+						]
+					}
+				},
+				{
+					"type": "drilldown.setToken",
+					"options": {
+						"fields": [
+							"sources"
+						],
+						"tokens": [
+							{
+								"token": "state",
+								"key": "row._add_sources.value"
+							}
+						]
+					}
+				},
+				{
+					"type": "drilldown.setToken",
+					"options": {
+						"fields": [
+							"hosts"
+						],
+						"tokens": [
+							{
+								"token": "state",
+								"key": "row._add_hosts.value"
+							}
+						]
+					}
+				},
+				{
+					"type": "drilldown.setToken",
+					"options": {
+						"fields": [
+							"indexes"
+						],
+						"tokens": [
+							{
+								"token": "state",
+								"key": "row._add_indexes.value"
+							}
+						]
+					}
+				},
+				{
+					"type": "drilldown.setToken",
+					"options": {
+						"fields": [
+							"dimension"
+						],
+						"tokens": [
+							{
+								"token": "state",
+								"key": "row._add_dimension.value"
+							}
+						]
+					}
+				}
+			]
+		},
+		"viz_dimensions": {
+			"type": "splunk.table",
+			"title": "Basic criteria",
+			"description": "Built from Topology clicks. Click a row to remove it.",
+			"dataSources": {
+				"primary": "ds_selection"
+			},
+			"options": {
+				"rowNumbers": false,
+				"wrap": true,
+				"count": 25,
+				"showInternalFields": false
+			},
+			"eventHandlers": [
+				{
+					"type": "drilldown.setToken",
+					"options": {
+						"tokens": [
+							{
+								"token": "state",
+								"key": "row._without.value"
+							}
+						]
+					}
+				}
+			]
+		},
+		"viz_criteria_spl": {
+			"type": "splunk.markdown",
+			"title": "SPL",
+			"description": "The latest value of each Basic criteria metric, split by the fields its rows name, in the syntax picked above; Latest values charts it. Copy it into Search with the same period.",
+			"options": {
+				"markdown": "```\n$Latest plan:result.spl$\n```",
+				"fontSize": "small"
+			}
+		},
+		"viz_latest_values": {
+			"type": "splunk.line",
+			"title": "Latest values (per selected metric)",
+			"description": "Charts the SPL beside it with timechart: latest(_value) per minute, one line per value of the fields each metric's rows name.",
+			"dataSources": {
+				"primary": "ds_latest_values"
+			},
+			"options": {
+				"legendDisplay": "right",
+				"nullValueDisplay": "gaps",
+				"yAxisAbbreviation": "auto",
+				"xAxisTitleVisibility": "hide"
+			}
+		},
+		"viz_samples_over_time": {
+			"type": "splunk.line",
+			"title": "Sample count over time (per Basic criteria row)",
+			"description": "Number of metric samples ingested per minute. Useful for confirming an ingest pipeline is healthy and spotting bursts or gaps.",
+			"dataSources": {
+				"primary": "ds_samples_over_time"
+			},
+			"options": {
+				"legendDisplay": "right",
+				"nullValueDisplay": "gaps",
+				"yAxisAbbreviation": "auto"
+			}
+		},
+		"viz_raw_samples": {
+			"type": "splunk.table",
+			"title": "Recent samples (mpreview)",
+			"description": "Raw metric samples for the matching metric_name(s), up to the Sample limit above. Inspect to see actual numeric values and dimension tagging.",
+			"dataSources": {
+				"primary": "ds_raw_samples"
+			},
+			"options": {
+				"rowNumbers": false,
+				"wrap": true,
+				"showInternalFields": false,
+				"count": 25,
+				"columnFormat": {
+					"ts": {
+						"width": 170
+					},
+					"name": {
+						"width": 338
+					},
+					"value": {
+						"width": 100
+					},
+					"dimension": {
+						"width": 122
+					},
+					"dimension_value": {
+						"width": 374
+					},
+					"host": {
+						"width": 110
+					},
+					"service.name": {
+						"width": 110
+					},
+					"k8s.deployment.name": {
+						"width": 116
+					}
+				}
+			},
+			"eventHandlers": [
+				{
+					"type": "drilldown.customUrl",
+					"options": {
+						"url": "/app/metricsexplorer/search?q=$row._drill.value$&earliest=$row._t0.value$&latest=$row._t1.value$",
+						"newTab": true
+					}
+				}
+			]
+		}
+	},
+	"defaults": {
+		"dataSources": {
+			"ds.search": {
+				"options": {
+					"queryParameters": {
+						"earliest": "$period.earliest$",
+						"latest": "$period.latest$"
+					}
+				}
+			}
+		},
+		"tokens": {
+			"default": {
+				"state": {
+					"value": "[]"
+				}
+			}
+		}
+	},
+	"applicationProperties": {
+		"hideEdit": true,
+		"hideExport": false,
+		"hideOpenInSearch": false
+	},
+	"layout": {
+		"tabs": {
+			"items": [
+				{
+					"layoutId": "layout_1",
+					"label": "Available Metrics"
+				},
+				{
+					"layoutId": "layout_recent_samples",
+					"label": "Recent samples"
+				}
+			]
+		},
+		"layoutDefinitions": {
+			"layout_1": {
+				"type": "grid",
+				"structure": [
+					{
+						"item": "viz_header",
+						"type": "block",
+						"position": {
+							"x": 0,
+							"y": 0,
+							"w": 1200,
+							"h": 80
+						}
+					},
+					{
+						"item": "viz_total_metric_names",
+						"type": "block",
+						"position": {
+							"x": 0,
+							"y": 80,
+							"w": 300,
+							"h": 160
+						}
+					},
+					{
+						"item": "viz_matching_metric_names",
+						"type": "block",
+						"position": {
+							"x": 300,
+							"y": 80,
+							"w": 300,
+							"h": 160
+						}
+					},
+					{
+						"item": "viz_distinct_hosts",
+						"type": "block",
+						"position": {
+							"x": 600,
+							"y": 80,
+							"w": 300,
+							"h": 160
+						}
+					},
+					{
+						"item": "viz_distinct_sources",
+						"type": "block",
+						"position": {
+							"x": 900,
+							"y": 80,
+							"w": 300,
+							"h": 160
+						}
+					},
+					{
+						"item": "viz_metric_list",
+						"type": "block",
+						"position": {
+							"x": 0,
+							"y": 240,
+							"w": 400,
+							"h": 380
+						}
+					},
+					{
+						"item": "viz_topology",
+						"type": "block",
+						"position": {
+							"x": 400,
+							"y": 240,
+							"w": 800,
+							"h": 380
+						}
+					},
+					{
+						"item": "viz_dimensions",
+						"type": "block",
+						"position": {
+							"x": 0,
+							"y": 620,
+							"w": 800,
+							"h": 380
+						}
+					},
+					{
+						"item": "viz_samples_over_time",
+						"type": "block",
+						"position": {
+							"x": 800,
+							"y": 620,
+							"w": 400,
+							"h": 380
+						}
+					},
+					{
+						"item": "input_spl_syntax",
+						"type": "input",
+						"position": {
+							"x": 0,
+							"y": 1000,
+							"w": 400,
+							"h": 100
+						}
+					},
+					{
+						"item": "input_open_spl",
+						"type": "input",
+						"position": {
+							"x": 400,
+							"y": 1000,
+							"w": 400,
+							"h": 100
+						}
+					},
+					{
+						"item": "viz_criteria_spl",
+						"type": "block",
+						"position": {
+							"x": 0,
+							"y": 1100,
+							"w": 800,
+							"h": 350
+						}
+					},
+					{
+						"item": "viz_latest_values",
+						"type": "block",
+						"position": {
+							"x": 800,
+							"y": 1000,
+							"w": 400,
+							"h": 450
+						}
+					}
+				]
+			},
+			"layout_recent_samples": {
+				"type": "grid",
+				"structure": [
+					{
+						"item": "input_sample_limit",
+						"type": "input",
+						"position": {
+							"x": 0,
+							"y": 0,
+							"w": 300,
+							"h": 100
+						}
+					},
+					{
+						"item": "viz_raw_samples",
+						"type": "block",
+						"position": {
+							"x": 0,
+							"y": 100,
+							"w": 1200,
+							"h": 560
+						}
+					}
+				]
+			}
+		},
+		"globalInputs": [
+			"input_metric",
+			"input_index",
+			"input_period"
+		],
+		"options": {
+			"submitButton": true
+		}
+	}
+}
+    ]]></definition>
+</dashboard>

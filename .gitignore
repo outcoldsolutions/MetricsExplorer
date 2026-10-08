@@ -1,0 +1,19 @@
+# Splunk writes these when the app is installed or edited in place; they never ship.
+local/
+metadata/local.meta
+
+# Packaged builds and AppInspect output.
+*.tar.gz
+*.spl
+dist/
+appinspect*.json
+
+# Editor and OS files.
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
+
+# AI memory and config
+.claude/

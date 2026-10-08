@@ -1,0 +1,45 @@
+{
+    "schemaVersion": "2.0.0",
+    "info": {
+        "title": "Metrics Explorer",
+        "id": {
+            "group": null,
+            "name": "metricsexplorer",
+            "version": "1.0.0"
+        },
+        "author": [
+            {
+                "name": "Outcold Solutions",
+                "email": "support@outcoldsolutions.com",
+                "company": "Outcold Solutions LLC"
+            }
+        ],
+        "releaseDate": "2026-10-08",
+        "description": "Inspect any metric by name: where it is emitted (sources, hosts, indexes), what dimensions it carries, its latest values, and recent raw samples.",
+        "classification": {
+            "intendedAudience": "IT",
+            "categories": ["IT Operations"],
+            "developmentStatus": "Production/Released"
+        },
+        "commonInformationModels": null,
+        "license": {
+            "name": "MIT",
+            "text": "LICENSE",
+            "uri": "https://opensource.org/license/mit"
+        },
+        "releaseNotes": {
+            "name": "Release notes",
+            "text": "RELEASE-NOTES.md",
+            "uri": null
+        }
+    },
+    "platformRequirements": {
+        "splunk": {
+            "Enterprise": ">=10.0"
+        }
+    },
+    "dependencies": {},
+    "tasks": [],
+    "supportedDeployments": ["_standalone", "_distributed", "_search_head_clustering"],
+    "targetWorkloads": ["_search_heads"]
+}

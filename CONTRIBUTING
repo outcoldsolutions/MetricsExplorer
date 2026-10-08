@@ -1,0 +1,9 @@
+## Contributing to Metrics Explorer
+No formal contribution process has yet been defined for this project, but contributions are welcome!
+
+If you have any helpful suggestions or requests, open a GitHub issue or contact Scott Raiford on the [Splunk user Slack](https://splk.it/slack).
+
+## AI Usage for Contributions
+As the scope of this project is fairly small, most of it is expected to be done by humans. Large AI-driven changes will be rejected. However, intricate work may be handled by suitable AI, with a complete human review.
+
+Pull requests and issue reports are expected to be fully human-written.

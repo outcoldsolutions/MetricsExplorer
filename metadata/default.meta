@@ -1,0 +1,6 @@
+[]
+export = none
+access = read : [ * ], write : [ sc_admin, admin, power ]
+
+[views]
+export = none
